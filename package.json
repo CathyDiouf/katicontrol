@@ -7,7 +7,7 @@
     "server:dev": "tsx watch --no-warnings server/index.ts",
     "client:dev": "vite",
     "build": "vite build",
-    "start": "cross-env NODE_ENV=production node --no-warnings --import tsx/esm server/index.ts",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "preview": "vite preview"
   },
   "engines": {

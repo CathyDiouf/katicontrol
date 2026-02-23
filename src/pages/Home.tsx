@@ -38,7 +38,7 @@ export default function Home() {
         <span className="text-sm text-slate-400">{new Date().toLocaleDateString('fr-SN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Dakar' })}</span>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Alerts */}
         {(dangerAlerts.length > 0 || warningAlerts.length > 0) && (
           <div className="space-y-2">
@@ -55,7 +55,7 @@ export default function Home() {
         )}
 
         {/* Revenue KPIs */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatCard label="Revenus aujourd'hui"  value={cfa(m?.revenue?.today)}  color="brand"/>
           <StatCard label="Revenus 7 jours"      value={cfa(m?.revenue?.week)}   color="brand"/>
           <StatCard label="Revenus ce mois"      value={cfa(m?.revenue?.month)}  color="brand"/>
@@ -63,9 +63,9 @@ export default function Home() {
             sub="Enregistrée (encaissements - dépenses + injections)"/>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* Pipeline */}
-          <div className="col-span-2 card">
+          <div className="md:col-span-2 card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-slate-800">Pipeline commandes</h2>
               <button onClick={() => navigate('/orders')} className="btn-ghost">Voir tout →</button>
@@ -138,7 +138,7 @@ export default function Home() {
               <h2 className="font-bold text-slate-800">Drops actifs</h2>
               <button onClick={() => navigate('/drops')} className="btn-ghost">Voir tout →</button>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {(m.active_drops as any[]).map((d: any) => {
                 const revPct  = d.target_revenue > 0 ? Math.min(100, (d.actual_revenue / d.target_revenue) * 100) : 0
                 return (

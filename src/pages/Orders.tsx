@@ -51,27 +51,26 @@ export default function Orders() {
         </button>
       </div>
 
-      <div className="p-6 space-y-4">
+      <div className="p-3 md:p-6 space-y-3 md:space-y-4">
         {/* Filters bar */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-xs">
+        <div className="space-y-2">
+          <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher client, produit, couleur…"
               className="field-input pl-9"/>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {STATUS_FILTERS.map(f => (
               <button key={f.v} onClick={() => setStatusFilter(f.v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${statusFilter === f.v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap transition-colors ${statusFilter === f.v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-600 border-slate-200'}`}>
                 {f.l}
               </button>
             ))}
-          </div>
-          <div className="flex items-center gap-2 ml-2">
+            <div className="w-px h-4 bg-slate-200 mx-1 shrink-0"/>
             {[['','Tout'],['unpaid','Non payé'],['partial','Partiel'],['paid','Payé']].map(([v,l]) => (
               <button key={v} onClick={() => setPayFilter(v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${payFilter === v ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap transition-colors ${payFilter === v ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>
                 {l}
               </button>
             ))}
@@ -96,6 +95,7 @@ export default function Orders() {
               <button onClick={() => navigate('/orders/new')} className="mt-4 btn-primary">Créer une commande</button>
             </div>
           ) : (
+            <div className="data-table-wrap">
             <table className="data-table">
               <thead><tr>
                 <th>Date</th>
@@ -137,6 +137,7 @@ export default function Orders() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

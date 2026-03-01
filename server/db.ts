@@ -164,6 +164,10 @@ db.exec(`
 `)
 
 try { db.exec('ALTER TABLE orders ADD COLUMN is_sample INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE orders ADD COLUMN external_id TEXT') } catch {}
+try { db.exec('ALTER TABLE orders ADD COLUMN external_source TEXT') } catch {}
+try { db.exec('ALTER TABLE orders ADD COLUMN external_group_id TEXT') } catch {}
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external ON orders(external_source, external_id)') } catch {}
 
 // ─── Business logic helpers ────────────────────────────────────────────────
 

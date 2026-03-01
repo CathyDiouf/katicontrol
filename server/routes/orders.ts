@@ -165,6 +165,149 @@ ordersRouter.put('/:id/costs', (req, res) => {
   res.json(row(db.prepare('SELECT * FROM order_costs WHERE order_id = ?').get(req.params.id)))
 })
 
+
+ordersRouter.post('/sync', (req, res) => {
+  const secret = process.env.KATICONTROL_SYNC_SECRET
+  if (!secret) return res.status(500).json({ error: 'Sync secret not configured' })
+  const auth = String(req.headers.authorization || '')
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : String(req.headers['x-katicontrol-secret'] || '')
+  if (token !== secret) return res.status(401).json({ error: 'Unauthorized' })
+
+  const { orderId, createdAt, status, transactionId, customer, items, summary } = req.body || {}
+  if (!orderId || !customer || !Array.isArray(items) || items.length === 0 || !summary) {
+    return res.status(400).json({ error: 'Invalid payload' })
+  }
+
+  const rawStatus = String(status || '').toLowerCase()
+  const payment_status = ['new', 'paid', 'success', 'completed', 'approved'].includes(rawStatus)
+    ? 'paid'
+    : ['pending', 'processing'].includes(rawStatus)
+      ? 'pending'
+      : 'unpaid'
+
+  const order_date = (createdAt || new Date().toISOString()).slice(0, 10)
+  const totalDiscount = Number(summary.discount || 0) + Number(summary.autoDiscount || 0)
+  const subtotal = Number(summary.subtotal || 0)
+  const shipping = Number(summary.shipping || 0)
+  const itemsCount = items.length || 1
+  const shippingShare = shipping / itemsCount
+
+  const customer_name = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || (customer.name || '')
+  const customer_contact = [
+    customer.email,
+    customer.phone,
+    customer.address,
+    customer.city,
+    customer.country,
+    customer.postalCode,
+  ].filter(Boolean).join(' | ')
+
+  let synced = 0
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i] || {}
+    const quantity = Number(item.quantity || 0)
+    const lineTotal = Number(item.price || 0) * quantity
+    const discountShare = subtotal > 0 ? (lineTotal / subtotal) * totalDiscount : 0
+    const amount_paid = payment_status === 'paid'
+      ? Math.max(0, lineTotal - discountShare + shippingShare)
+      : 0
+
+    const measurements = item.measurements || {}
+    const measurementBits = []
+    if (measurements.height) measurementBits.push(`Taille ${measurements.height}cm`)
+    if (measurements.bust) measurementBits.push(`Buste ${measurements.bust}cm`)
+    if (measurements.waist) measurementBits.push(`Taille ${measurements.waist}cm`)
+    if (measurements.hips) measurementBits.push(`Hanches ${measurements.hips}cm`)
+    if (measurements.shoulders) measurementBits.push(`Epaules ${measurements.shoulders}cm`)
+    if (measurements.sleeveLength) measurementBits.push(`Manche ${measurements.sleeveLength}cm`)
+    if (measurements.dressLength) measurementBits.push(`Longueur ${measurements.dressLength}cm`)
+    if (measurements.notes) measurementBits.push(`Notes: ${measurements.notes}`)
+
+    const notes = [
+      `WearKati Order ${orderId} (item ${i + 1}/${items.length})`,
+      transactionId ? `Transaction ${transactionId}` : null,
+      measurementBits.length ? `Mesures: ${measurementBits.join(' • ')}` : null,
+    ].filter(Boolean).join(' | ')
+
+    const external_id = `${orderId}:${i + 1}`
+    const existing = row(db.prepare(
+      'SELECT order_id FROM orders WHERE external_source = ? AND external_id = ?'
+    ).get('wearkati', external_id))
+
+    if (existing) {
+      db.prepare(`
+        UPDATE orders SET
+          order_date=?, product_name=?, channel=?, customer_type=?, customer_name=?, customer_contact=?,
+          selling_price=?, discount=?, promo_code=?, size=?, height=?, color=?, measurements_status=?,
+          payment_method=?, payment_status=?, amount_paid=?, delivery_fee_charged_to_client=?,
+          production_status=?, notes=?, is_imported=?, import_source=?, external_group_id=?
+        WHERE order_id=?
+      `).run(
+        order_date,
+        item.productName || null,
+        'wearkati.com',
+        'online',
+        customer_name || null,
+        customer_contact || null,
+        lineTotal,
+        discountShare || 0,
+        summary.promoCode || null,
+        item.sizeType === 'sur-mesure' ? 'Sur Mesure' : (item.standardSize || null),
+        item.height || measurements.height || null,
+        item.color || null,
+        item.sizeType === 'sur-mesure' ? 'complete' : 'standard',
+        'naboopay',
+        payment_status,
+        amount_paid,
+        shippingShare,
+        'new',
+        notes || null,
+        1,
+        'wearkati',
+        String(orderId),
+        existing.order_id
+      )
+    } else {
+      db.prepare(`
+        INSERT INTO orders (
+          order_date, product_name, channel, customer_type, customer_name, customer_contact,
+          selling_price, discount, promo_code, size, height, color, measurements_status,
+          payment_method, payment_status, amount_paid, delivery_fee_charged_to_client,
+          production_status, notes, is_imported, import_source, external_source, external_id, external_group_id
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(
+        order_date,
+        item.productName || null,
+        'wearkati.com',
+        'online',
+        customer_name || null,
+        customer_contact || null,
+        lineTotal,
+        discountShare || 0,
+        summary.promoCode || null,
+        item.sizeType === 'sur-mesure' ? 'Sur Mesure' : (item.standardSize || null),
+        item.height || measurements.height || null,
+        item.color || null,
+        item.sizeType === 'sur-mesure' ? 'complete' : 'standard',
+        'naboopay',
+        payment_status,
+        amount_paid,
+        shippingShare,
+        'new',
+        notes || null,
+        1,
+        'wearkati',
+        'wearkati',
+        external_id,
+        String(orderId)
+      )
+    }
+    synced += 1
+  }
+
+  res.json({ ok: true, synced })
+})
+
 ordersRouter.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM orders WHERE order_id = ?').run(req.params.id)
   res.json({ ok: true })

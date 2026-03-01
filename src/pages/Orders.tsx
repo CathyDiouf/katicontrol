@@ -19,14 +19,16 @@ export default function Orders() {
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState('')
   const [payFilter, setPayFilter]       = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
   const [search, setSearch]             = useState('')
 
   const params: Record<string,string> = {}
   if (statusFilter) params.status = statusFilter
   if (payFilter)    params.payment_status = payFilter
+  if (sourceFilter === 'wearkati') params.external_source = 'wearkati'
 
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['orders', statusFilter, payFilter],
+    queryKey: ['orders', statusFilter, payFilter, sourceFilter],
     queryFn:  () => api.orders.list(params),
   })
 
@@ -74,6 +76,13 @@ export default function Orders() {
                 {l}
               </button>
             ))}
+            <div className="w-px h-4 bg-slate-200 mx-1 shrink-0"/>
+            {[['', 'Toutes sources'], ['wearkati', 'WearKati']].map(([v, l]) => (
+              <button key={v} onClick={() => setSourceFilter(v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap transition-colors ${sourceFilter === v ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-500 border-slate-200'}`}>
+                {l}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -118,6 +127,9 @@ export default function Orders() {
                       <td className="text-slate-500 whitespace-nowrap">{fmtDate(o.order_date)}</td>
                       <td className="font-medium text-slate-800">
                         {o.product_name || '—'}
+                        {o.external_source === 'wearkati' && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">WearKati</span>
+                        )}
                         {o.color && <span className="text-slate-400 text-xs ml-1">· {o.color}</span>}
                         {o.size  && <span className="text-slate-400 text-xs ml-1">{o.size}</span>}
                       </td>

@@ -4,12 +4,13 @@ import { db, computeCOGS, computeCostStatus, row, rows } from '../db.js'
 export const ordersRouter = Router()
 
 ordersRouter.get('/', (req, res) => {
-  const { drop_id, status, payment_status, limit = '100', offset = '0' } = req.query as any
+  const { drop_id, status, payment_status, external_source, limit = '100', offset = '0' } = req.query as any
   let where = 'WHERE 1=1'
   const params: any[] = []
   if (drop_id)        { where += ' AND o.drop_id = ?';           params.push(drop_id) }
   if (status)         { where += ' AND o.production_status = ?'; params.push(status) }
   if (payment_status) { where += ' AND o.payment_status = ?';    params.push(payment_status) }
+  if (external_source) { where += ' AND o.external_source = ?'; params.push(external_source) }
   params.push(Number(limit), Number(offset))
 
   const orderList = rows(db.prepare(`

@@ -164,7 +164,28 @@ dashboardRouter.get('/sales', (_req, res) => {
     WHERE customer_type IS NOT NULL
     GROUP BY customer_type
   `).all())
-  const by_size         = rows(db.prepare(`SELECT size, COUNT(*) as count FROM orders WHERE production_status NOT IN ('cancelled','returned') AND size IS NOT NULL GROUP BY size ORDER BY count DESC`).all())
+  const by_size         = rows(db.prepare(`
+    WITH filtered_orders AS (
+      SELECT
+        size,
+        CASE
+          WHEN customer_contact IS NOT NULL AND TRIM(customer_contact) <> '' THEN LOWER(TRIM(customer_contact))
+          WHEN customer_name IS NOT NULL AND TRIM(customer_name) <> '' THEN LOWER(TRIM(customer_name))
+          ELSE 'order:' || order_id
+        END AS customer_key
+      FROM orders
+      WHERE production_status NOT IN ('cancelled','returned')
+      AND size IS NOT NULL
+    ),
+    unique_size_customers AS (
+      SELECT DISTINCT size, customer_key
+      FROM filtered_orders
+    )
+    SELECT size, COUNT(*) as count
+    FROM unique_size_customers
+    GROUP BY size
+    ORDER BY count DESC
+  `).all())
   const by_color        = rows(db.prepare(`SELECT color, COUNT(*) as count FROM orders WHERE production_status NOT IN ('cancelled','returned') AND color IS NOT NULL GROUP BY color ORDER BY count DESC LIMIT 10`).all())
   const top_products    = rows(db.prepare(`SELECT COALESCE(o.product_name, p.product_name, 'Inconnu') as pname, COUNT(*) as units, COALESCE(SUM(o.selling_price-o.discount),0) as revenue FROM orders o LEFT JOIN products p ON p.product_id=o.product_id WHERE o.production_status NOT IN ('cancelled','returned') GROUP BY pname ORDER BY units DESC LIMIT 10`).all()).map((r:any)=>({...r,product_name:r.pname}))
   res.json({ by_channel, by_customer_type, by_size, by_color, top_products })

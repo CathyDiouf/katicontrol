@@ -26,6 +26,7 @@ export default function Orders() {
   if (statusFilter) params.status = statusFilter
   if (payFilter)    params.payment_status = payFilter
   if (sourceFilter === 'wearkati') params.external_source = 'wearkati'
+  params.limit = '500'
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['orders', statusFilter, payFilter, sourceFilter],

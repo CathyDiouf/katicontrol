@@ -134,7 +134,36 @@ dashboardRouter.get('/profitability', (_req, res) => {
 // ─── Sales ─────────────────────────────────────────────────────────────────
 dashboardRouter.get('/sales', (_req, res) => {
   const by_channel      = rows(db.prepare(`SELECT channel, COUNT(*) as orders, COALESCE(SUM(selling_price-discount),0) as revenue FROM orders WHERE production_status NOT IN ('cancelled','returned') AND channel IS NOT NULL GROUP BY channel ORDER BY revenue DESC`).all())
-  const by_customer_type = rows(db.prepare(`SELECT customer_type, COUNT(*) as count, COALESCE(SUM(selling_price-discount),0) as revenue FROM orders WHERE production_status NOT IN ('cancelled','returned') AND customer_type IS NOT NULL GROUP BY customer_type`).all())
+  const by_customer_type = rows(db.prepare(`
+    WITH filtered_orders AS (
+      SELECT
+        CASE
+          WHEN customer_contact IS NOT NULL AND TRIM(customer_contact) <> '' THEN LOWER(TRIM(customer_contact))
+          WHEN customer_name IS NOT NULL AND TRIM(customer_name) <> '' THEN LOWER(TRIM(customer_name))
+          ELSE 'order:' || order_id
+        END AS customer_key,
+        customer_type,
+        COALESCE(selling_price - discount, 0) AS revenue
+      FROM orders
+      WHERE production_status NOT IN ('cancelled','returned')
+    ),
+    customers AS (
+      SELECT
+        customer_key,
+        CASE
+          WHEN SUM(CASE WHEN customer_type = 'returning' THEN 1 ELSE 0 END) > 0 THEN 'returning'
+          WHEN SUM(CASE WHEN customer_type = 'new' THEN 1 ELSE 0 END) > 0 THEN 'new'
+          ELSE NULL
+        END AS customer_type,
+        SUM(revenue) AS revenue
+      FROM filtered_orders
+      GROUP BY customer_key
+    )
+    SELECT customer_type, COUNT(*) AS count, COALESCE(SUM(revenue),0) AS revenue
+    FROM customers
+    WHERE customer_type IS NOT NULL
+    GROUP BY customer_type
+  `).all())
   const by_size         = rows(db.prepare(`SELECT size, COUNT(*) as count FROM orders WHERE production_status NOT IN ('cancelled','returned') AND size IS NOT NULL GROUP BY size ORDER BY count DESC`).all())
   const by_color        = rows(db.prepare(`SELECT color, COUNT(*) as count FROM orders WHERE production_status NOT IN ('cancelled','returned') AND color IS NOT NULL GROUP BY color ORDER BY count DESC LIMIT 10`).all())
   const top_products    = rows(db.prepare(`SELECT COALESCE(o.product_name, p.product_name, 'Inconnu') as pname, COUNT(*) as units, COALESCE(SUM(o.selling_price-o.discount),0) as revenue FROM orders o LEFT JOIN products p ON p.product_id=o.product_id WHERE o.production_status NOT IN ('cancelled','returned') GROUP BY pname ORDER BY units DESC LIMIT 10`).all()).map((r:any)=>({...r,product_name:r.pname}))

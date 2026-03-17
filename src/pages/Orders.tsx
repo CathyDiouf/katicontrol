@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { api } from '../lib/api'
 import { cfa, fmtDate } from '../lib/formatters'
-import { ProductionBadge, PaymentBadge, CostStatusBadge } from '../components/Badge'
+import { PaymentBadge, CostStatusBadge } from '../components/Badge'
 
 const STATUS_FILTERS = [
   { v: '',            l: 'Tous' },
@@ -15,12 +15,23 @@ const STATUS_FILTERS = [
   { v: 'cancelled',   l: 'Annulés' },
 ]
 
+const ORDER_STATUS_OPTIONS = [
+  { v: 'new',         l: 'Nouveau' },
+  { v: 'in_progress', l: 'En cours' },
+  { v: 'ready',       l: 'Prêt' },
+  { v: 'delivered',   l: 'Livré' },
+  { v: 'cancelled',   l: 'Annulé' },
+  { v: 'returned',    l: 'Retourné' },
+]
+
 export default function Orders() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
   const [payFilter, setPayFilter]       = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [search, setSearch]             = useState('')
+  const [pendingStatusOrderId, setPendingStatusOrderId] = useState<number | null>(null)
 
   const params: Record<string,string> = {}
   if (statusFilter) params.status = statusFilter
@@ -31,6 +42,17 @@ export default function Orders() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['orders', statusFilter, payFilter, sourceFilter],
     queryFn:  () => api.orders.list(params),
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: number; status: string }) =>
+      api.orders.updateStatus(orderId, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['morning'] })
+      qc.invalidateQueries({ queryKey: ['alerts'] })
+    },
+    onSettled: () => setPendingStatusOrderId(null),
   })
 
   const filtered = (orders as any[]).filter(o => {
@@ -143,7 +165,29 @@ export default function Orders() {
                         {cfa(o.gross_profit)}
                       </td>
                       <td><PaymentBadge status={o.payment_status}/></td>
-                      <td><ProductionBadge status={o.production_status}/></td>
+                      <td>
+                        <select
+                          value={o.production_status || 'new'}
+                          disabled={statusMutation.isPending && pendingStatusOrderId === o.order_id}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            e.stopPropagation()
+                            const next = e.target.value
+                            if (next === o.production_status) return
+                            setPendingStatusOrderId(o.order_id)
+                            try {
+                              await statusMutation.mutateAsync({ orderId: o.order_id, status: next })
+                            } catch (err: any) {
+                              window.alert(err?.message || 'Mise à jour du statut impossible')
+                            }
+                          }}
+                          className="field-select py-1.5 text-xs min-w-[120px]"
+                        >
+                          {ORDER_STATUS_OPTIONS.map(s => (
+                            <option key={s.v} value={s.v}>{s.l}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td><CostStatusBadge status={o.cost_status || 'ESTIMATED'}/></td>
                     </tr>
                   )

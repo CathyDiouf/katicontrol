@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { db, computeCOGS, computeCostStatus, row, rows } from '../db.js'
 
 export const ordersRouter = Router()
+const ORDER_STATUSES = new Set(['new', 'in_progress', 'ready', 'delivered', 'cancelled', 'returned'])
 
 ordersRouter.get('/', (req, res) => {
   const { drop_id, status, payment_status, external_source, limit = '100', offset = '0' } = req.query as any
@@ -154,6 +155,25 @@ ordersRouter.put('/:id', (req, res) => {
     req.params.id,
   )
   saveMaterialOverrides(Number(req.params.id), req.body.material_overrides)
+  res.json(row(db.prepare('SELECT * FROM orders WHERE order_id = ?').get(req.params.id)))
+})
+
+ordersRouter.put('/:id/status', (req, res) => {
+  const status = String(req.body?.production_status || '').trim()
+  if (!ORDER_STATUSES.has(status)) {
+    return res.status(400).json({ error: 'Invalid production status' })
+  }
+
+  const updated = db.prepare(`
+    UPDATE orders
+    SET production_status = ?
+    WHERE order_id = ?
+  `).run(status, req.params.id)
+
+  if (updated.changes === 0) {
+    return res.status(404).json({ error: 'Not found' })
+  }
+
   res.json(row(db.prepare('SELECT * FROM orders WHERE order_id = ?').get(req.params.id)))
 })
 

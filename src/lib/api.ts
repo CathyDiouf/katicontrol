@@ -33,6 +33,8 @@ export const api = {
                  get:    (id: number) => req(`/orders/${id}`),
                  create: (data: any) => req('/orders', { method: 'POST', body: JSON.stringify(data) }),
                  update: (id: number, data: any) => req(`/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+                 updateStatus: (id: number, production_status: string) =>
+                   req(`/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ production_status }) }),
                  delete: (id: number) => req(`/orders/${id}`, { method: 'DELETE' }),
                  getCosts: (id: number) => req(`/orders/${id}/costs`),
                  updateCosts: (id: number, data: any) => req(`/orders/${id}/costs`, { method: 'PUT', body: JSON.stringify(data) }) },

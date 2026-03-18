@@ -6,6 +6,7 @@ import './db.js' // initialise DB on startup
 
 import { dropsRouter }       from './routes/drops.js'
 import { productsRouter }    from './routes/products.js'
+import { clientsRouter }     from './routes/clients.js'
 import { ordersRouter }      from './routes/orders.js'
 import { expensesRouter }    from './routes/expenses.js'
 import { cashRouter }        from './routes/cash.js'
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: true }))
 // API routes
 app.use('/api/drops',    dropsRouter)
 app.use('/api/products', productsRouter)
+app.use('/api/clients',  clientsRouter)
 app.use('/api/orders',   ordersRouter)
 app.use('/api/expenses', expensesRouter)
 app.use('/api/cash',     cashRouter)

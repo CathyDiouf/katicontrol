@@ -63,6 +63,7 @@ db.exec(`
     product_name TEXT,
     channel     TEXT,
     customer_type TEXT,
+    client_id    INTEGER REFERENCES clients(client_id) ON DELETE SET NULL,
     customer_name TEXT,
     customer_contact TEXT,
     selling_price REAL NOT NULL DEFAULT 0,
@@ -81,6 +82,19 @@ db.exec(`
     notes       TEXT,
     is_imported INTEGER DEFAULT 0,
     import_source TEXT
+  )
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS clients (
+    client_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name TEXT NOT NULL,
+    contact   TEXT,
+    default_size   TEXT,
+    default_height TEXT,
+    default_color  TEXT,
+    notes      TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
   )
 `)
 
@@ -164,10 +178,13 @@ db.exec(`
 `)
 
 try { db.exec('ALTER TABLE orders ADD COLUMN is_sample INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE orders ADD COLUMN client_id INTEGER REFERENCES clients(client_id) ON DELETE SET NULL') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN external_id TEXT') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN external_source TEXT') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN external_group_id TEXT') } catch {}
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external ON orders(external_source, external_id)') } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id)') } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_clients_name_contact ON clients(full_name, contact)') } catch {}
 
 // ─── Business logic helpers ────────────────────────────────────────────────
 

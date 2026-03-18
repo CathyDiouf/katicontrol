@@ -28,6 +28,10 @@ export const api = {
                  update: (id: number, data: any) => req(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
                  delete: (id: number) => req(`/products/${id}`, { method: 'DELETE' }) },
 
+  // Clients
+  clients:     { list:   ()         => req('/clients'),
+                 create: (data: any) => req('/clients', { method: 'POST', body: JSON.stringify(data) }) },
+
   // Orders
   orders:      { list:   (params?: Record<string,string>) => req(`/orders${params ? '?' + new URLSearchParams(params) : ''}`),
                  get:    (id: number) => req(`/orders/${id}`),

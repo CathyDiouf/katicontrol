@@ -13,6 +13,11 @@ const PROD_STATUS     = [
   { v: 'ready', l: 'Prêt' }, { v: 'delivered', l: 'Livré' },
   { v: 'cancelled', l: 'Annulé' }, { v: 'returned', l: 'Retourné' },
 ]
+const CLIENT_TYPES = [
+  { v: '', l: '—' },
+  { v: 'new', l: 'Nouveau' },
+  { v: 'returning', l: 'Fidèle' },
+]
 
 type MaterialOverride = {
   item_id: number
@@ -23,7 +28,7 @@ type MaterialOverride = {
 }
 
 const SHARED_EMPTY = {
-  order_date: today(), drop_id: '', channel: '', customer_type: '', customer_name: '',
+  order_date: today(), drop_id: '', channel: '', customer_type: '', client_id: '', customer_name: '',
   customer_contact: '', payment_method: '', payment_status: 'unpaid',
   production_status: 'new', tailor_assigned: '', notes: '', promo_code: '',
   is_sample: false,
@@ -55,9 +60,18 @@ export default function OrderForm() {
   const [shared, setShared] = useState<Record<string, any>>({ ...SHARED_EMPTY })
   const [lines, setLines]   = useState([{ ...LINE_EMPTY, costs: {}, materialOverrides: [] as MaterialOverride[], showOverrides: false }])
   const [error, setError]   = useState('')
+  const [showNewClientForm, setShowNewClientForm] = useState(false)
+  const [newClient, setNewClient] = useState({
+    full_name: '',
+    contact: '',
+    default_size: '',
+    default_height: '',
+    default_color: '',
+  })
 
   const { data: drops    = [] } = useQuery({ queryKey: ['drops'],    queryFn: api.drops.list })
   const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: api.products.list })
+  const { data: clients  = [] } = useQuery({ queryKey: ['clients'],  queryFn: api.clients.list })
 
   // Load existing order when editing
   const { data: orderData } = useQuery({
@@ -73,6 +87,7 @@ export default function OrderForm() {
     const o = orderData as any
     setShared({
       order_date: o.order_date || today(), drop_id: o.drop_id || '', channel: o.channel || '',
+      client_id: o.client_id || '',
       customer_type: o.customer_type || '', customer_name: o.customer_name || '',
       customer_contact: o.customer_contact || '', payment_method: o.payment_method || '',
       payment_status: o.payment_status || 'unpaid',
@@ -110,12 +125,25 @@ export default function OrderForm() {
     if (c?.cost_id) setLines(ls => ls.map((l, i) => i === 0 ? { ...l, costs: c } : l))
   }, [costsData])
 
+  const createClientMutation = useMutation({
+    mutationFn: (payload: any) => api.clients.create(payload),
+    onSuccess: (created: any) => {
+      qc.invalidateQueries({ queryKey: ['clients'] })
+      applyClientDefaults(created)
+      setShowNewClientForm(false)
+      setNewClient({ full_name: '', contact: '', default_size: '', default_height: '', default_color: '' })
+      setS('customer_type', 'new')
+    },
+    onError: (e: any) => setError((e as any).message),
+  })
+
   const mutation = useMutation({
     mutationFn: async () => {
       const results: any[] = []
       for (const line of lines) {
         const payload: any = {
           ...shared,
+          client_id: shared.client_id ? Number(shared.client_id) : undefined,
           is_sample: shared.is_sample ? 1 : 0,
           product_id:    line.product_id || undefined,
           product_name:  !line.product_id ? (line.product_name || undefined) : undefined,
@@ -164,13 +192,47 @@ export default function OrderForm() {
   })
 
   function setS(k: string, v: any) { setShared(s => ({ ...s, [k]: v })) }
+  function setNewClientField(k: string, v: any) { setNewClient(s => ({ ...s, [k]: v })) }
+
+  function applyClientDefaults(client: any) {
+    setShared(s => ({
+      ...s,
+      client_id: client.client_id,
+      customer_name: client.full_name || s.customer_name,
+      customer_contact: client.contact || s.customer_contact,
+      customer_type: s.customer_type || ((client.order_count || 0) > 0 ? 'returning' : 'new'),
+    }))
+    setLines(ls => ls.map(l => ({
+      ...l,
+      size: l.size || client.default_size || '',
+      height: l.height || client.default_height || '',
+      color: l.color || client.default_color || '',
+    })))
+  }
+
+  function selectedClient() {
+    return (clients as any[]).find((c: any) => String(c.client_id) === String(shared.client_id))
+  }
+
+  function makeDefaultLineFromClient() {
+    const c: any = selectedClient()
+    return {
+      ...LINE_EMPTY,
+      size: c?.default_size || '',
+      height: c?.default_height || '',
+      color: c?.default_color || '',
+      costs: {},
+      materialOverrides: [] as MaterialOverride[],
+      showOverrides: false,
+    }
+  }
   function setLine(i: number, k: string, v: any) {
     setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l))
   }
   function setLineCost(i: number, k: string, v: any) {
     setLines(ls => ls.map((l, idx) => idx === i ? { ...l, costs: { ...l.costs, [k]: v } } : l))
   }
-  function addLine() { setLines(ls => [...ls, { ...LINE_EMPTY, costs: {}, materialOverrides: [], showOverrides: false }]) }
+  function addLine() { setLines(ls => [...ls, makeDefaultLineFromClient()]) }
   function removeLine(i: number) { setLines(ls => ls.filter((_, idx) => idx !== i)) }
 
   function setOverrideQty(lineIdx: number, itemId: number, value: string) {
@@ -308,14 +370,84 @@ export default function OrderForm() {
           <div className="card space-y-4">
             <h3 className="font-semibold text-slate-700 text-sm border-b border-slate-100 pb-2">Client & Paiement</h3>
             <div className="grid grid-cols-2 gap-3">
+              <Field label="Client existant">
+                <select
+                  value={shared.client_id || ''}
+                  onChange={e => {
+                    const next = e.target.value
+                    setS('client_id', next)
+                    if (!next) return
+                    const client = (clients as any[]).find((c: any) => String(c.client_id) === String(next))
+                    if (client) applyClientDefaults(client)
+                  }}
+                  className="field-select"
+                >
+                  <option value="">— Sélectionner —</option>
+                  {(clients as any[]).map((c: any) => (
+                    <option key={c.client_id} value={c.client_id}>
+                      {c.full_name}{c.contact ? ` · ${c.contact}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label=" ">
+                <button
+                  type="button"
+                  onClick={() => setShowNewClientForm(v => !v)}
+                  className="btn-secondary w-full"
+                >
+                  {showNewClientForm ? 'Fermer nouveau client' : 'Ajouter nouveau client'}
+                </button>
+              </Field>
+            </div>
+
+            {showNewClientForm && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Nom client *">
+                    <input value={newClient.full_name} onChange={e => setNewClientField('full_name', e.target.value)} className="field-input" placeholder="Fatou Diallo"/>
+                  </Field>
+                  <Field label="Contact">
+                    <input value={newClient.contact} onChange={e => setNewClientField('contact', e.target.value)} className="field-input" placeholder="+221 77..."/>
+                  </Field>
+                  <Field label="Taille par défaut">
+                    <select value={newClient.default_size} onChange={e => setNewClientField('default_size', e.target.value)} className="field-select">
+                      <option value="">—</option>
+                      {SIZES.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Hauteur par défaut">
+                    <input value={newClient.default_height} onChange={e => setNewClientField('default_height', e.target.value)} className="field-input" placeholder="165cm"/>
+                  </Field>
+                  <Field label="Couleur par défaut">
+                    <input value={newClient.default_color} onChange={e => setNewClientField('default_color', e.target.value)} className="field-input" placeholder="Noir"/>
+                  </Field>
+                </div>
+                <button
+                  type="button"
+                  disabled={createClientMutation.isPending}
+                  onClick={() => {
+                    setError('')
+                    if (!newClient.full_name.trim()) {
+                      setError('Le nom client est requis')
+                      return
+                    }
+                    createClientMutation.mutate(newClient)
+                  }}
+                  className="btn-primary"
+                >
+                  {createClientMutation.isPending ? 'Ajout...' : 'Créer et sélectionner ce client'}
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Nom client">
                 <input value={shared.customer_name || ''} onChange={e => setS('customer_name', e.target.value)} placeholder="Fatou Diallo" className="field-input"/>
               </Field>
               <Field label="Type client">
                 <select value={shared.customer_type} onChange={e => setS('customer_type', e.target.value)} className="field-select">
-                  <option value="">—</option>
-                  <option value="new">Nouveau</option>
-                  <option value="returning">Fidèle</option>
+                  {CLIENT_TYPES.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
                 </select>
               </Field>
               <Field label="Contact">

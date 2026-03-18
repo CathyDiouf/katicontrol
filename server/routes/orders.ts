@@ -92,6 +92,7 @@ ordersRouter.get('/:id', (req, res) => {
 ordersRouter.post('/', (req, res) => {
   const {
     order_date, drop_id, product_id, product_name, channel, customer_type,
+    client_id,
     customer_name, customer_contact, selling_price, discount, promo_code,
     size, height, color, measurements_status, payment_method, payment_status,
     amount_paid, delivery_fee_charged_to_client, production_status,
@@ -100,15 +101,15 @@ ordersRouter.post('/', (req, res) => {
 
   const result = db.prepare(`
     INSERT INTO orders (order_date, drop_id, product_id, product_name, channel,
-      customer_type, customer_name, customer_contact, selling_price, discount,
+      customer_type, client_id, customer_name, customer_contact, selling_price, discount,
       promo_code, size, height, color, measurements_status, payment_method,
       payment_status, amount_paid, delivery_fee_charged_to_client,
       production_status, tailor_assigned, notes, is_sample)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     order_date || new Date().toISOString().slice(0, 10),
     drop_id||null, product_id||null, product_name||null, channel||null,
-    customer_type||null, customer_name||null, customer_contact||null,
+    customer_type||null, client_id||null, customer_name||null, customer_contact||null,
     selling_price||0, discount||0, promo_code||null,
     size||null, height||null, color||null,
     measurements_status||'missing', payment_method||null,
@@ -129,6 +130,7 @@ ordersRouter.post('/', (req, res) => {
 ordersRouter.put('/:id', (req, res) => {
   const {
     order_date, drop_id, product_id, product_name, channel, customer_type,
+    client_id,
     customer_name, customer_contact, selling_price, discount, promo_code,
     size, height, color, measurements_status, payment_method, payment_status,
     amount_paid, delivery_fee_charged_to_client, production_status,
@@ -136,7 +138,7 @@ ordersRouter.put('/:id', (req, res) => {
   } = req.body
   db.prepare(`
     UPDATE orders SET order_date=?, drop_id=?, product_id=?, product_name=?,
-      channel=?, customer_type=?, customer_name=?, customer_contact=?,
+      channel=?, customer_type=?, client_id=?, customer_name=?, customer_contact=?,
       selling_price=?, discount=?, promo_code=?, size=?, height=?, color=?,
       measurements_status=?, payment_method=?, payment_status=?, amount_paid=?,
       delivery_fee_charged_to_client=?, production_status=?,
@@ -144,7 +146,7 @@ ordersRouter.put('/:id', (req, res) => {
     WHERE order_id=?
   `).run(
     order_date, drop_id||null, product_id||null, product_name||null,
-    channel||null, customer_type||null, customer_name||null, customer_contact||null,
+    channel||null, customer_type||null, client_id||null, customer_name||null, customer_contact||null,
     selling_price, discount||0, promo_code||null,
     size||null, height||null, color||null,
     measurements_status||'missing', payment_method||null,

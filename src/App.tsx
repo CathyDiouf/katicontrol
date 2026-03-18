@@ -10,6 +10,7 @@ const Drops = lazy(() => import('./pages/Drops'))
 const DropForm = lazy(() => import('./pages/DropForm'))
 const DropDetail = lazy(() => import('./pages/DropDetail'))
 const Products = lazy(() => import('./pages/Products'))
+const Clients = lazy(() => import('./pages/Clients'))
 const ProductForm = lazy(() => import('./pages/ProductForm'))
 const Expenses = lazy(() => import('./pages/Expenses'))
 const ExpenseForm = lazy(() => import('./pages/ExpenseForm'))
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/drops/:id" element={<DropDetail />} />
             <Route path="/drops/:id/edit" element={<DropForm />} />
             <Route path="/products" element={<Products />} />
+            <Route path="/clients" element={<Clients />} />
             <Route path="/products/new" element={<ProductForm />} />
             <Route path="/products/:id/edit" element={<ProductForm />} />
             <Route path="/expenses" element={<Expenses />} />

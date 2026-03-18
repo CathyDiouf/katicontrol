@@ -5,9 +5,20 @@ export const clientsRouter = Router()
 
 clientsRouter.get('/', (_req, res) => {
   const list = rows(db.prepare(`
-    SELECT c.*, COUNT(o.order_id) AS order_count
+    SELECT
+      c.*,
+      COUNT(o.order_id) AS order_count,
+      COALESCE(SUM(o.selling_price - o.discount), 0) AS total_revenue,
+      COALESCE(SUM(o.amount_paid), 0) AS total_paid,
+      MIN(o.order_date) AS first_order_date,
+      MAX(o.order_date) AS last_order_date,
+      COUNT(DISTINCT COALESCE(d.drop_name, 'Sans drop')) AS drop_count,
+      GROUP_CONCAT(DISTINCT COALESCE(d.drop_name, 'Sans drop')) AS drops
     FROM clients c
-    LEFT JOIN orders o ON o.client_id = c.client_id
+    LEFT JOIN orders o
+      ON o.client_id = c.client_id
+     AND o.production_status NOT IN ('cancelled','returned')
+    LEFT JOIN drops d ON d.drop_id = o.drop_id
     GROUP BY c.client_id
     ORDER BY c.full_name COLLATE NOCASE ASC
   `).all())

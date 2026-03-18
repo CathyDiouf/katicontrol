@@ -186,6 +186,42 @@ try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external ON orders(e
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id)') } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_clients_name_contact ON clients(full_name, contact)') } catch {}
 
+// Backfill clients from historical orders so client selector has data immediately.
+try {
+  db.exec(`
+    INSERT INTO clients (full_name, contact)
+    SELECT
+      TRIM(o.customer_name) AS full_name,
+      NULLIF(TRIM(o.customer_contact), '') AS contact
+    FROM orders o
+    WHERE o.customer_name IS NOT NULL
+      AND TRIM(o.customer_name) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM clients c
+        WHERE LOWER(TRIM(c.full_name)) = LOWER(TRIM(o.customer_name))
+          AND LOWER(TRIM(COALESCE(c.contact, ''))) = LOWER(TRIM(COALESCE(o.customer_contact, '')))
+      )
+    GROUP BY LOWER(TRIM(o.customer_name)), LOWER(TRIM(COALESCE(o.customer_contact, '')))
+  `)
+} catch {}
+
+try {
+  db.exec(`
+    UPDATE orders
+    SET client_id = (
+      SELECT c.client_id
+      FROM clients c
+      WHERE LOWER(TRIM(c.full_name)) = LOWER(TRIM(COALESCE(orders.customer_name, '')))
+        AND LOWER(TRIM(COALESCE(c.contact, ''))) = LOWER(TRIM(COALESCE(orders.customer_contact, '')))
+      LIMIT 1
+    )
+    WHERE client_id IS NULL
+      AND customer_name IS NOT NULL
+      AND TRIM(customer_name) <> ''
+  `)
+} catch {}
+
 // ─── Business logic helpers ────────────────────────────────────────────────
 
 export function computeCostStatus(costs: any): 'COMPLETE' | 'PARTIAL' | 'ESTIMATED' {

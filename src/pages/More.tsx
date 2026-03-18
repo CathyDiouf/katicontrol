@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { Package, TrendingUp, BarChart2, Upload, DollarSign, ChevronRight } from 'lucide-react'
+import { Package, TrendingUp, BarChart2, Upload, DollarSign, ChevronRight, Users } from 'lucide-react'
 
 const items = [
   { icon: Package,    label: 'Produits',       sub: 'Gérer le catalogue',  path: '/products' },
+  { icon: Users,      label: 'Clients',        sub: 'Historique & fidélité', path: '/clients' },
   { icon: TrendingUp, label: 'Rentabilité',     sub: 'Profit brut & net',  path: '/profitability' },
   { icon: BarChart2,  label: 'Performances',   sub: 'Ventes & canaux',    path: '/sales' },
   { icon: DollarSign, label: 'Trésorerie',     sub: 'Position cash',      path: '/cash' },

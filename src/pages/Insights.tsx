@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { cfa, fmtDate } from '../lib/formatters'
 
@@ -19,6 +20,7 @@ function SignalCard({ s }: { s: any }) {
 }
 
 export default function Insights() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['insights'], queryFn: api.dashboard.insights })
   const { data: tasks = [] } = useQuery({ queryKey: ['insight-tasks'], queryFn: api.dashboard.insightTasks })
@@ -51,6 +53,9 @@ export default function Insights() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Analyse Business</h1>
+        <button type="button" className="btn-secondary" onClick={() => navigate('/insights/settings')}>
+          Paramètres
+        </button>
       </div>
 
       <div className="p-3 md:p-6 space-y-4">

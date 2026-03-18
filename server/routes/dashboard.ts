@@ -4,6 +4,32 @@ import { getQuantityConsumed } from '../lib/inventory-helpers.js'
 
 export const dashboardRouter = Router()
 
+const INSIGHT_DEFAULTS: Record<string, number> = {
+  marketing_window_days: 60,
+  dormant_window_days: 60,
+  loyalty_window_days: 180,
+  loyalty_orders_threshold: 3,
+  loyalty_revenue_threshold: 200000,
+}
+
+function loadInsightSettings() {
+  const raw = rows(db.prepare(`SELECT key, value FROM business_settings WHERE key IN (?,?,?,?,?)`).all(
+    'marketing_window_days',
+    'dormant_window_days',
+    'loyalty_window_days',
+    'loyalty_orders_threshold',
+    'loyalty_revenue_threshold',
+  ))
+  const map = new Map(raw.map((r: any) => [String(r.key), Number(r.value)]))
+  return {
+    marketing_window_days: Number.isFinite(map.get('marketing_window_days')) ? Number(map.get('marketing_window_days')) : INSIGHT_DEFAULTS.marketing_window_days,
+    dormant_window_days: Number.isFinite(map.get('dormant_window_days')) ? Number(map.get('dormant_window_days')) : INSIGHT_DEFAULTS.dormant_window_days,
+    loyalty_window_days: Number.isFinite(map.get('loyalty_window_days')) ? Number(map.get('loyalty_window_days')) : INSIGHT_DEFAULTS.loyalty_window_days,
+    loyalty_orders_threshold: Number.isFinite(map.get('loyalty_orders_threshold')) ? Number(map.get('loyalty_orders_threshold')) : INSIGHT_DEFAULTS.loyalty_orders_threshold,
+    loyalty_revenue_threshold: Number.isFinite(map.get('loyalty_revenue_threshold')) ? Number(map.get('loyalty_revenue_threshold')) : INSIGHT_DEFAULTS.loyalty_revenue_threshold,
+  }
+}
+
 // ─── Morning Board ─────────────────────────────────────────────────────────
 dashboardRouter.get('/morning', (_req, res) => {
   const today      = new Date().toISOString().slice(0, 10)
@@ -295,6 +321,7 @@ dashboardRouter.get('/recommendations', (_req, res) => {
 
 // ─── Decision Insights ────────────────────────────────────────────────────
 dashboardRouter.get('/insights', (_req, res) => {
+  const settings = loadInsightSettings()
   const g = (sql: string, ...p: any[]) => {
     const r = row(db.prepare(sql).get(...p))
     return r ? Number(Object.values(r)[0] || 0) : 0
@@ -349,8 +376,9 @@ dashboardRouter.get('/insights', (_req, res) => {
   const cogs30 = Number(marginRow?.cogs || 0)
   const grossMargin30 = rev30 > 0 ? ((rev30 - cogs30) / rev30) * 100 : 0
 
-  const d60 = new Date(today.getTime() - 60 * 86400000).toISOString().slice(0, 10)
-  const d180 = new Date(today.getTime() - 180 * 86400000).toISOString().slice(0, 10)
+  const dMarketing = new Date(today.getTime() - settings.marketing_window_days * 86400000).toISOString().slice(0, 10)
+  const dDormant = new Date(today.getTime() - settings.dormant_window_days * 86400000).toISOString().slice(0, 10)
+  const dLoyalty = new Date(today.getTime() - settings.loyalty_window_days * 86400000).toISOString().slice(0, 10)
 
   const collectionPerformance = rows(db.prepare(`
     SELECT
@@ -365,7 +393,7 @@ dashboardRouter.get('/insights', (_req, res) => {
     GROUP BY collection
     ORDER BY revenue DESC
     LIMIT 10
-  `).all(d60))
+  `).all(dMarketing))
 
   const dormantProducts = rows(db.prepare(`
     SELECT
@@ -381,7 +409,7 @@ dashboardRouter.get('/insights', (_req, res) => {
     HAVING recent_orders = 0
     ORDER BY last_order_date ASC
     LIMIT 12
-  `).all(d60))
+  `).all(dDormant))
 
   const loyaltyCandidates = rows(db.prepare(`
     WITH recent_client_orders AS (
@@ -400,10 +428,10 @@ dashboardRouter.get('/insights', (_req, res) => {
     )
     SELECT *
     FROM recent_client_orders
-    WHERE orders_180d >= 3 OR revenue_180d >= 200000
+    WHERE orders_180d >= ? OR revenue_180d >= ?
     ORDER BY orders_180d DESC, revenue_180d DESC
     LIMIT 8
-  `).all(d180))
+  `).all(dLoyalty, settings.loyalty_orders_threshold, settings.loyalty_revenue_threshold))
 
   const signals: any[] = []
   const actions: any[] = []
@@ -473,7 +501,7 @@ dashboardRouter.get('/insights', (_req, res) => {
     actions.push({
       priority: 3,
       title: 'Relancer les pièces dormantes',
-      why: `${dormantProducts.length} produit(s) actif(s) sans commande sur les 60 derniers jours.`,
+      why: `${dormantProducts.length} produit(s) actif(s) sans commande sur les ${settings.dormant_window_days} derniers jours.`,
       steps: ['Créer une campagne ciblée par collection', 'Mettre en avant 3 pièces dormantes en homepage', 'Tester un bundle ou une remise limitée'],
     })
   }
@@ -482,7 +510,7 @@ dashboardRouter.get('/insights', (_req, res) => {
     actions.push({
       priority: 2,
       title: 'Activer une campagne fidélité VIP',
-      why: `${loyaltyCandidates.length} clients ont atteint le seuil fidélité (3 commandes ou 200k FCFA / 180j).`,
+      why: `${loyaltyCandidates.length} clients ont atteint le seuil fidélité (${settings.loyalty_orders_threshold} commandes ou ${Math.round(settings.loyalty_revenue_threshold).toLocaleString()} FCFA / ${settings.loyalty_window_days}j).`,
       steps: ['Contacter prioritairement les 5 meilleurs clients', 'Offrir un avantage personnalisé', 'Suivre le taux de réachat à 30 jours'],
     })
   }
@@ -514,14 +542,16 @@ dashboardRouter.get('/insights', (_req, res) => {
     signals,
     actions: actions.sort((a, b) => a.priority - b.priority),
     marketing: {
-      period: { from: d60, to: today.toISOString().slice(0, 10) },
+      period: { from: dMarketing, to: today.toISOString().slice(0, 10) },
       collections: collectionPerformance,
       dormant_products: dormantProducts,
       loyalty_candidates: loyaltyCandidates,
       thresholds: {
-        dormant_window_days: 60,
-        loyalty_orders_180d: 3,
-        loyalty_revenue_180d: 200000,
+        marketing_window_days: settings.marketing_window_days,
+        dormant_window_days: settings.dormant_window_days,
+        loyalty_window_days: settings.loyalty_window_days,
+        loyalty_orders_threshold: settings.loyalty_orders_threshold,
+        loyalty_revenue_threshold: settings.loyalty_revenue_threshold,
       },
     },
   })
@@ -542,6 +572,31 @@ dashboardRouter.get('/insights/tasks', (_req, res) => {
       steps: t.steps ? JSON.parse(t.steps) : [],
     }))
   res.json(tasks)
+})
+
+dashboardRouter.get('/insights/settings', (_req, res) => {
+  res.json(loadInsightSettings())
+})
+
+dashboardRouter.put('/insights/settings', (req, res) => {
+  const payload = req.body || {}
+  const next = {
+    marketing_window_days: Math.max(14, Math.min(365, Number(payload.marketing_window_days || INSIGHT_DEFAULTS.marketing_window_days))),
+    dormant_window_days: Math.max(14, Math.min(365, Number(payload.dormant_window_days || INSIGHT_DEFAULTS.dormant_window_days))),
+    loyalty_window_days: Math.max(30, Math.min(365, Number(payload.loyalty_window_days || INSIGHT_DEFAULTS.loyalty_window_days))),
+    loyalty_orders_threshold: Math.max(1, Math.min(20, Number(payload.loyalty_orders_threshold || INSIGHT_DEFAULTS.loyalty_orders_threshold))),
+    loyalty_revenue_threshold: Math.max(10000, Math.min(10000000, Number(payload.loyalty_revenue_threshold || INSIGHT_DEFAULTS.loyalty_revenue_threshold))),
+  }
+
+  for (const [key, value] of Object.entries(next)) {
+    db.prepare(`
+      INSERT INTO business_settings (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+    `).run(key, String(value))
+  }
+
+  res.json(next)
 })
 
 dashboardRouter.post('/insights/tasks', (req, res) => {

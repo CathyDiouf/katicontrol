@@ -192,6 +192,14 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS business_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )
+`)
+
 try { db.exec('ALTER TABLE orders ADD COLUMN is_sample INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN client_id INTEGER REFERENCES clients(client_id) ON DELETE SET NULL') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN external_id TEXT') } catch {}
@@ -201,6 +209,17 @@ try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external ON orders(e
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id)') } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_clients_name_contact ON clients(full_name, contact)') } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON strategic_tasks(status, priority)') } catch {}
+
+try {
+  db.exec(`
+    INSERT OR IGNORE INTO business_settings (key, value) VALUES
+      ('marketing_window_days', '60'),
+      ('dormant_window_days', '60'),
+      ('loyalty_window_days', '180'),
+      ('loyalty_orders_threshold', '3'),
+      ('loyalty_revenue_threshold', '200000')
+  `)
+} catch {}
 
 // Backfill clients from historical orders so client selector has data immediately.
 try {

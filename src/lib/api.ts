@@ -72,6 +72,8 @@ export const api = {
                  sales:           () => req('/dashboard/sales'),
                  insights:        () => req('/dashboard/insights'),
                  insightTasks:    () => req('/dashboard/insights/tasks'),
+                 insightSettings: () => req('/dashboard/insights/settings'),
+                 updateInsightSettings: (data: any) => req('/dashboard/insights/settings', { method: 'PUT', body: JSON.stringify(data) }),
                  createInsightTask: (data: any) => req('/dashboard/insights/tasks', { method: 'POST', body: JSON.stringify(data) }),
                  updateInsightTaskStatus: (id: number, status: string) =>
                    req(`/dashboard/insights/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),

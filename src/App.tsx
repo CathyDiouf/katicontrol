@@ -18,6 +18,7 @@ const Cash = lazy(() => import('./pages/Cash'))
 const CashForm = lazy(() => import('./pages/CashForm'))
 const Profitability = lazy(() => import('./pages/Profitability'))
 const Sales = lazy(() => import('./pages/Sales'))
+const Insights = lazy(() => import('./pages/Insights'))
 const Import = lazy(() => import('./pages/Import'))
 const More = lazy(() => import('./pages/More'))
 const Inventory = lazy(() => import('./pages/Inventory'))
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="/cash/new" element={<CashForm />} />
             <Route path="/profitability" element={<Profitability />} />
             <Route path="/sales" element={<Sales />} />
+            <Route path="/insights" element={<Insights />} />
             <Route path="/import" element={<Import />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/inventory/new" element={<InventoryForm />} />

@@ -70,6 +70,7 @@ export const api = {
   dashboard:   { morning:         () => req('/dashboard/morning'),
                  profitability:   () => req('/dashboard/profitability'),
                  sales:           () => req('/dashboard/sales'),
+                 insights:        () => req('/dashboard/insights'),
                  alerts:          () => req('/dashboard/alerts'),
                  recommendations: () => req('/dashboard/recommendations') },
 

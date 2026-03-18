@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Home, ShoppingBag, Calendar, TrendingUp, BarChart2,
-  Package, DollarSign, Upload, Receipt, Plus, ChevronDown, Archive, Menu, X, Users,
+  Package, DollarSign, Upload, Receipt, Plus, ChevronDown, Archive, Menu, X, Users, Brain,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -16,6 +16,7 @@ const NAV = [
   { path: '/cash',          icon: DollarSign, label: 'Trésorerie' },
   { path: '/profitability', icon: TrendingUp, label: 'Rentabilité' },
   { path: '/sales',         icon: BarChart2,  label: 'Performances' },
+  { path: '/insights',      icon: Brain,      label: 'Analyse Business' },
   { path: '/import',        icon: Upload,    label: 'Import / Export' },
 ]
 

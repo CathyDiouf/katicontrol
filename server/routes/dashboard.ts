@@ -292,3 +292,152 @@ dashboardRouter.get('/recommendations', (_req, res) => {
 
   res.json(recs)
 })
+
+// ─── Decision Insights ────────────────────────────────────────────────────
+dashboardRouter.get('/insights', (_req, res) => {
+  const g = (sql: string, ...p: any[]) => {
+    const r = row(db.prepare(sql).get(...p))
+    return r ? Number(Object.values(r)[0] || 0) : 0
+  }
+  const today = new Date()
+  const d30 = new Date(today.getTime() - 30 * 86400000).toISOString().slice(0, 10)
+  const d90 = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10)
+
+  const revenue30 = g(`SELECT COALESCE(SUM(selling_price-discount),0) FROM orders WHERE order_date >= ? AND production_status NOT IN ('cancelled','returned')`, d30)
+  const collected30 = g(`SELECT COALESCE(SUM(amount_paid),0) FROM orders WHERE order_date >= ? AND production_status NOT IN ('cancelled','returned')`, d30)
+  const orders30 = g(`SELECT COUNT(*) FROM orders WHERE order_date >= ? AND production_status NOT IN ('cancelled','returned')`, d30)
+  const avgOrder30 = orders30 > 0 ? revenue30 / orders30 : 0
+
+  const unpaidOrders = g(`SELECT COUNT(*) FROM orders WHERE payment_status IN ('unpaid','partial') AND production_status NOT IN ('cancelled','returned','delivered')`)
+  const unpaidAmount = g(`SELECT COALESCE(SUM((selling_price-discount)-amount_paid),0) FROM orders WHERE payment_status IN ('unpaid','partial') AND production_status NOT IN ('cancelled','returned','delivered')`)
+
+  const inProgressOrders = g(`SELECT COUNT(*) FROM orders WHERE production_status IN ('new','in_progress')`)
+  const readyOrders = g(`SELECT COUNT(*) FROM orders WHERE production_status='ready'`)
+
+  const activeClients30 = g(`SELECT COUNT(DISTINCT COALESCE(NULLIF(TRIM(customer_contact),''), LOWER(TRIM(customer_name)))) FROM orders WHERE order_date >= ? AND production_status NOT IN ('cancelled','returned')`, d30)
+  const recurringClients90 = g(`
+    WITH client_orders AS (
+      SELECT COALESCE(NULLIF(TRIM(customer_contact),''), LOWER(TRIM(customer_name))) AS customer_key, COUNT(*) as orders
+      FROM orders
+      WHERE order_date >= ?
+        AND production_status NOT IN ('cancelled','returned')
+        AND (customer_name IS NOT NULL OR customer_contact IS NOT NULL)
+      GROUP BY customer_key
+    )
+    SELECT COUNT(*) FROM client_orders WHERE orders >= 2
+  `, d90)
+  const totalClients90 = g(`
+    SELECT COUNT(DISTINCT COALESCE(NULLIF(TRIM(customer_contact),''), LOWER(TRIM(customer_name))))
+    FROM orders
+    WHERE order_date >= ?
+      AND production_status NOT IN ('cancelled','returned')
+      AND (customer_name IS NOT NULL OR customer_contact IS NOT NULL)
+  `, d90)
+  const repeatRate90 = totalClients90 > 0 ? (recurringClients90 / totalClients90) * 100 : 0
+
+  const marginRow: any = row(db.prepare(`
+    SELECT
+      COALESCE(SUM(o.selling_price - o.discount),0) AS rev,
+      COALESCE(SUM(COALESCE(oc.fabric_cost, p.fabric_est, 0) + COALESCE(oc.sewing_cost, p.sewing_est, 0) + COALESCE(oc.trims_cost, p.trims_est, 0) + COALESCE(oc.packaging_cost, p.packaging_est, 0) + COALESCE(oc.delivery_cost_paid_by_business, 0) + COALESCE(oc.payment_fee, 0) + COALESCE(oc.other_order_cost, 0)),0) AS cogs
+    FROM orders o
+    LEFT JOIN order_costs oc ON oc.order_id = o.order_id
+    LEFT JOIN products p ON p.product_id = o.product_id
+    WHERE o.order_date >= ?
+      AND o.production_status NOT IN ('cancelled','returned')
+  `).get(d30))
+  const rev30 = Number(marginRow?.rev || 0)
+  const cogs30 = Number(marginRow?.cogs || 0)
+  const grossMargin30 = rev30 > 0 ? ((rev30 - cogs30) / rev30) * 100 : 0
+
+  const signals: any[] = []
+  const actions: any[] = []
+
+  const collectionRate = revenue30 > 0 ? (collected30 / revenue30) * 100 : 0
+  signals.push({
+    level: collectionRate >= 85 ? 'good' : collectionRate >= 65 ? 'warning' : 'critical',
+    title: 'Taux d’encaissement (30 jours)',
+    value: `${Math.round(collectionRate)}%`,
+    detail: `${Math.round(collected30).toLocaleString()} FCFA encaissés sur ${Math.round(revenue30).toLocaleString()} FCFA de ventes.`,
+  })
+  if (collectionRate < 85 && unpaidAmount > 0) {
+    actions.push({
+      priority: 1,
+      title: 'Plan de recouvrement des impayés',
+      why: `${unpaidOrders} commandes actives partiellement/non payées (${Math.round(unpaidAmount).toLocaleString()} FCFA).`,
+      steps: ['Lister les clients en retard > 7 jours', 'Bloquer les nouvelles livraisons non critiques', 'Suivre un objectif hebdo de recouvrement'],
+    })
+  }
+
+  signals.push({
+    level: grossMargin30 >= 45 ? 'good' : grossMargin30 >= 30 ? 'warning' : 'critical',
+    title: 'Marge brute (30 jours)',
+    value: `${Math.round(grossMargin30)}%`,
+    detail: `CA ${Math.round(rev30).toLocaleString()} FCFA, COGS ${Math.round(cogs30).toLocaleString()} FCFA.`,
+  })
+  if (grossMargin30 < 35 && orders30 > 0) {
+    actions.push({
+      priority: 2,
+      title: 'Améliorer la marge sur les best-sellers',
+      why: 'La marge brute récente est sous le niveau cible.',
+      steps: ['Revoir prix et remises sur top produits', 'Renseigner systématiquement les coûts réels', 'Négocier coûts matière/fournisseurs'],
+    })
+  }
+
+  signals.push({
+    level: repeatRate90 >= 35 ? 'good' : repeatRate90 >= 20 ? 'warning' : 'critical',
+    title: 'Clients récurrents (90 jours)',
+    value: `${Math.round(repeatRate90)}%`,
+    detail: `${recurringClients90} clients récurrents sur ${totalClients90} clients actifs.`,
+  })
+  if (repeatRate90 < 30) {
+    actions.push({
+      priority: 3,
+      title: 'Booster la rétention client',
+      why: 'Le taux de réachat est encore bas.',
+      steps: ['Relance 10/30 jours après livraison', 'Offre fidélité sur 2e achat', 'Segmenter par client/collection favorite'],
+    })
+  }
+
+  signals.push({
+    level: inProgressOrders <= 20 ? 'good' : inProgressOrders <= 40 ? 'warning' : 'critical',
+    title: 'Charge production en attente',
+    value: `${inProgressOrders} commandes`,
+    detail: `${readyOrders} commandes prêtes à livrer.`,
+  })
+  if (inProgressOrders > 25) {
+    actions.push({
+      priority: 4,
+      title: 'Fluidifier la production',
+      why: 'Le backlog de production peut ralentir les livraisons.',
+      steps: ['Prioriser par date de commande', 'Affecter les retards à un tailleur dédié', 'Suivre un SLA interne par statut'],
+    })
+  }
+
+  const headline = collectionRate < 70
+    ? 'Priorité cash: sécuriser les encaissements avant toute croissance.'
+    : grossMargin30 < 30
+      ? 'Priorité marge: corriger pricing et coûts pour protéger le profit.'
+      : repeatRate90 < 20
+        ? 'Priorité fidélisation: transformer les nouveaux clients en clients récurrents.'
+        : 'Performance globalement saine: passer en mode optimisation fine.'
+
+  res.json({
+    period: { from: d30, to: today.toISOString().slice(0, 10) },
+    summary: {
+      headline,
+      revenue30,
+      collected30,
+      orders30,
+      avg_order_value30: avgOrder30,
+      active_clients30: activeClients30,
+      repeat_rate90: repeatRate90,
+      unpaid_orders: unpaidOrders,
+      unpaid_amount: unpaidAmount,
+      in_progress_orders: inProgressOrders,
+      ready_orders: readyOrders,
+      gross_margin30: grossMargin30,
+    },
+    signals,
+    actions: actions.sort((a, b) => a.priority - b.priority),
+  })
+})

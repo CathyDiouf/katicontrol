@@ -251,9 +251,10 @@ export default function OrderForm() {
     setLine(i, 'product_id', pid)
     const p = (products as any[]).find(x => x.product_id === Number(pid))
     if (p) {
-      if (!isEdit && !lines[i].selling_price) setLine(i, 'selling_price', p.default_price || '')
       setLines(ls => ls.map((l, idx) => idx === i ? {
-        ...l, product_id: pid,
+        ...l,
+        product_id: pid,
+        selling_price: shared.is_sample ? l.selling_price : (p.default_price ?? l.selling_price),
         costs: { fabric_cost: p.fabric_est, sewing_cost: p.sewing_est, trims_cost: p.trims_est, packaging_cost: p.packaging_est },
         materialOverrides: [],
         showOverrides: false,

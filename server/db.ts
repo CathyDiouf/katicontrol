@@ -177,6 +177,21 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS strategic_tasks (
+    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source  TEXT DEFAULT 'insights',
+    priority INTEGER DEFAULT 3,
+    title   TEXT NOT NULL,
+    why     TEXT,
+    steps   TEXT,
+    status  TEXT DEFAULT 'open',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+  )
+`)
+
 try { db.exec('ALTER TABLE orders ADD COLUMN is_sample INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN client_id INTEGER REFERENCES clients(client_id) ON DELETE SET NULL') } catch {}
 try { db.exec('ALTER TABLE orders ADD COLUMN external_id TEXT') } catch {}
@@ -185,6 +200,7 @@ try { db.exec('ALTER TABLE orders ADD COLUMN external_group_id TEXT') } catch {}
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external ON orders(external_source, external_id)') } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id)') } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_clients_name_contact ON clients(full_name, contact)') } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON strategic_tasks(status, priority)') } catch {}
 
 // Backfill clients from historical orders so client selector has data immediately.
 try {

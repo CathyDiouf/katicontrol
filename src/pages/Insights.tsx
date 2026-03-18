@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { cfa } from '../lib/formatters'
 
@@ -19,8 +19,21 @@ function SignalCard({ s }: { s: any }) {
 }
 
 export default function Insights() {
+  const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['insights'], queryFn: api.dashboard.insights })
+  const { data: tasks = [] } = useQuery({ queryKey: ['insight-tasks'], queryFn: api.dashboard.insightTasks })
   const d = data as any
+  const taskList = tasks as any[]
+
+  const createTaskMutation = useMutation({
+    mutationFn: (payload: any) => api.dashboard.createInsightTask(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['insight-tasks'] }),
+  })
+
+  const updateTaskStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => api.dashboard.updateInsightTaskStatus(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['insight-tasks'] }),
+  })
 
   if (isLoading) {
     return <div className="flex justify-center p-12"><div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"/></div>
@@ -62,6 +75,25 @@ export default function Insights() {
                 <div key={a.priority} className="rounded-xl border border-slate-200 p-3">
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-slate-800">P{a.priority} · {a.title}</div>
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs px-2.5 py-1"
+                      disabled={createTaskMutation.isPending}
+                      onClick={async () => {
+                        try {
+                          await createTaskMutation.mutateAsync({
+                            priority: a.priority,
+                            title: a.title,
+                            why: a.why,
+                            steps: a.steps || [],
+                          })
+                        } catch (err: any) {
+                          window.alert(err?.message || 'Création de tâche impossible')
+                        }
+                      }}
+                    >
+                      Créer tâche
+                    </button>
                   </div>
                   <div className="text-sm text-slate-500 mt-1">{a.why}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -69,6 +101,49 @@ export default function Insights() {
                       <span key={idx} className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{step}</span>
                     ))}
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h2 className="font-bold text-slate-800 mb-3">Suivi des tâches décisionnelles</h2>
+          {taskList.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucune tâche créée pour le moment.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {taskList.map((t: any) => (
+                <div key={t.task_id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-slate-800">P{t.priority} · {t.title}</div>
+                      {t.why && <div className="text-sm text-slate-500 mt-1">{t.why}</div>}
+                    </div>
+                    <select
+                      value={t.status}
+                      disabled={updateTaskStatusMutation.isPending}
+                      onChange={async e => {
+                        try {
+                          await updateTaskStatusMutation.mutateAsync({ id: t.task_id, status: e.target.value })
+                        } catch (err: any) {
+                          window.alert(err?.message || 'Mise à jour impossible')
+                        }
+                      }}
+                      className="field-select min-w-[140px] text-xs"
+                    >
+                      <option value="open">Ouverte</option>
+                      <option value="in_progress">En cours</option>
+                      <option value="done">Terminée</option>
+                    </select>
+                  </div>
+                  {(t.steps || []).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(t.steps || []).map((step: string, idx: number) => (
+                        <span key={idx} className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{step}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

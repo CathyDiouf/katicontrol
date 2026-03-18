@@ -441,3 +441,69 @@ dashboardRouter.get('/insights', (_req, res) => {
     actions: actions.sort((a, b) => a.priority - b.priority),
   })
 })
+
+dashboardRouter.get('/insights/tasks', (_req, res) => {
+  const tasks = rows(db.prepare(`
+    SELECT *
+    FROM strategic_tasks
+    ORDER BY
+      CASE status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'done' THEN 2 ELSE 3 END,
+      priority ASC,
+      created_at DESC
+    LIMIT 100
+  `).all())
+    .map((t: any) => ({
+      ...t,
+      steps: t.steps ? JSON.parse(t.steps) : [],
+    }))
+  res.json(tasks)
+})
+
+dashboardRouter.post('/insights/tasks', (req, res) => {
+  const title = String(req.body?.title || '').trim()
+  const why = String(req.body?.why || '').trim()
+  const priority = Number(req.body?.priority || 3)
+  const steps = Array.isArray(req.body?.steps) ? req.body.steps : []
+  if (!title) return res.status(400).json({ error: 'Titre requis' })
+
+  const existing = row(db.prepare(`
+    SELECT task_id FROM strategic_tasks
+    WHERE LOWER(TRIM(title)) = LOWER(?)
+      AND status IN ('open','in_progress')
+    LIMIT 1
+  `).get(title))
+  if (existing) return res.status(409).json({ error: 'Cette action existe déjà dans les tâches actives' })
+
+  const result = db.prepare(`
+    INSERT INTO strategic_tasks (source, priority, title, why, steps, status)
+    VALUES (?,?,?,?,?,?)
+  `).run(
+    'insights',
+    Number.isFinite(priority) ? Math.max(1, Math.min(5, priority)) : 3,
+    title,
+    why || null,
+    JSON.stringify(steps),
+    'open'
+  )
+  const created = row(db.prepare('SELECT * FROM strategic_tasks WHERE task_id=?').get(result.lastInsertRowid))
+  res.status(201).json({ ...created, steps: created?.steps ? JSON.parse(created.steps) : [] })
+})
+
+dashboardRouter.put('/insights/tasks/:id/status', (req, res) => {
+  const status = String(req.body?.status || '').trim()
+  if (!['open', 'in_progress', 'done'].includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide' })
+  }
+
+  const updated = db.prepare(`
+    UPDATE strategic_tasks
+    SET status = ?,
+        updated_at = datetime('now'),
+        completed_at = CASE WHEN ? = 'done' THEN datetime('now') ELSE NULL END
+    WHERE task_id = ?
+  `).run(status, status, req.params.id)
+
+  if (updated.changes === 0) return res.status(404).json({ error: 'Not found' })
+  const task = row(db.prepare('SELECT * FROM strategic_tasks WHERE task_id=?').get(req.params.id))
+  res.json({ ...task, steps: task?.steps ? JSON.parse(task.steps) : [] })
+})

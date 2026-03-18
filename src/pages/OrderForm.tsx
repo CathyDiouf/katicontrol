@@ -250,8 +250,8 @@ export default function OrderForm() {
   function handleProductChange(i: number, pid: string) {
     setLine(i, 'product_id', pid)
     const p = (products as any[]).find(x => x.product_id === Number(pid))
-    if (p && !isEdit) {
-      if (!lines[i].selling_price) setLine(i, 'selling_price', p.default_price || '')
+    if (p) {
+      if (!isEdit && !lines[i].selling_price) setLine(i, 'selling_price', p.default_price || '')
       setLines(ls => ls.map((l, idx) => idx === i ? {
         ...l, product_id: pid,
         costs: { fabric_cost: p.fabric_est, sewing_cost: p.sewing_est, trims_cost: p.trims_est, packaging_cost: p.packaging_est },

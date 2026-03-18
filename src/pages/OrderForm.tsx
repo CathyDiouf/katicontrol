@@ -186,6 +186,10 @@ export default function OrderForm() {
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['morning'] })
       qc.invalidateQueries({ queryKey: ['alerts'] })
+      if (isEdit && id) {
+        qc.invalidateQueries({ queryKey: ['order', id] })
+        qc.invalidateQueries({ queryKey: ['order-costs', id] })
+      }
       navigate(isEdit ? `/orders/${id}` : '/orders')
     },
     onError: (e: any) => setError((e as any).message),

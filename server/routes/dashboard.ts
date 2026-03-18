@@ -349,6 +349,62 @@ dashboardRouter.get('/insights', (_req, res) => {
   const cogs30 = Number(marginRow?.cogs || 0)
   const grossMargin30 = rev30 > 0 ? ((rev30 - cogs30) / rev30) * 100 : 0
 
+  const d60 = new Date(today.getTime() - 60 * 86400000).toISOString().slice(0, 10)
+  const d180 = new Date(today.getTime() - 180 * 86400000).toISOString().slice(0, 10)
+
+  const collectionPerformance = rows(db.prepare(`
+    SELECT
+      COALESCE(NULLIF(TRIM(p.collection), ''), 'Sans collection') AS collection,
+      COUNT(o.order_id) AS orders,
+      COALESCE(SUM(o.selling_price - o.discount), 0) AS revenue,
+      MAX(o.order_date) AS last_order_date
+    FROM orders o
+    LEFT JOIN products p ON p.product_id = o.product_id
+    WHERE o.order_date >= ?
+      AND o.production_status NOT IN ('cancelled','returned')
+    GROUP BY collection
+    ORDER BY revenue DESC
+    LIMIT 10
+  `).all(d60))
+
+  const dormantProducts = rows(db.prepare(`
+    SELECT
+      p.product_id,
+      p.product_name,
+      COALESCE(NULLIF(TRIM(p.collection), ''), 'Sans collection') AS collection,
+      COALESCE(SUM(CASE WHEN o.order_date >= ? AND o.production_status NOT IN ('cancelled','returned') THEN 1 ELSE 0 END), 0) AS recent_orders,
+      MAX(CASE WHEN o.production_status NOT IN ('cancelled','returned') THEN o.order_date END) AS last_order_date
+    FROM products p
+    LEFT JOIN orders o ON o.product_id = p.product_id
+    WHERE p.active_status = 1
+    GROUP BY p.product_id
+    HAVING recent_orders = 0
+    ORDER BY last_order_date ASC
+    LIMIT 12
+  `).all(d60))
+
+  const loyaltyCandidates = rows(db.prepare(`
+    WITH recent_client_orders AS (
+      SELECT
+        c.client_id,
+        c.full_name,
+        c.contact,
+        COUNT(o.order_id) AS orders_180d,
+        COALESCE(SUM(o.selling_price - o.discount), 0) AS revenue_180d,
+        MAX(o.order_date) AS last_order_date
+      FROM clients c
+      JOIN orders o ON o.client_id = c.client_id
+      WHERE o.order_date >= ?
+        AND o.production_status NOT IN ('cancelled','returned')
+      GROUP BY c.client_id
+    )
+    SELECT *
+    FROM recent_client_orders
+    WHERE orders_180d >= 3 OR revenue_180d >= 200000
+    ORDER BY orders_180d DESC, revenue_180d DESC
+    LIMIT 8
+  `).all(d180))
+
   const signals: any[] = []
   const actions: any[] = []
 
@@ -413,6 +469,24 @@ dashboardRouter.get('/insights', (_req, res) => {
     })
   }
 
+  if (dormantProducts.length >= 5) {
+    actions.push({
+      priority: 3,
+      title: 'Relancer les pièces dormantes',
+      why: `${dormantProducts.length} produit(s) actif(s) sans commande sur les 60 derniers jours.`,
+      steps: ['Créer une campagne ciblée par collection', 'Mettre en avant 3 pièces dormantes en homepage', 'Tester un bundle ou une remise limitée'],
+    })
+  }
+
+  if (loyaltyCandidates.length > 0) {
+    actions.push({
+      priority: 2,
+      title: 'Activer une campagne fidélité VIP',
+      why: `${loyaltyCandidates.length} clients ont atteint le seuil fidélité (3 commandes ou 200k FCFA / 180j).`,
+      steps: ['Contacter prioritairement les 5 meilleurs clients', 'Offrir un avantage personnalisé', 'Suivre le taux de réachat à 30 jours'],
+    })
+  }
+
   const headline = collectionRate < 70
     ? 'Priorité cash: sécuriser les encaissements avant toute croissance.'
     : grossMargin30 < 30
@@ -439,6 +513,17 @@ dashboardRouter.get('/insights', (_req, res) => {
     },
     signals,
     actions: actions.sort((a, b) => a.priority - b.priority),
+    marketing: {
+      period: { from: d60, to: today.toISOString().slice(0, 10) },
+      collections: collectionPerformance,
+      dormant_products: dormantProducts,
+      loyalty_candidates: loyaltyCandidates,
+      thresholds: {
+        dormant_window_days: 60,
+        loyalty_orders_180d: 3,
+        loyalty_revenue_180d: 200000,
+      },
+    },
   })
 })
 

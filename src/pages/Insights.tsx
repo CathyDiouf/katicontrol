@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
-import { cfa } from '../lib/formatters'
+import { cfa, fmtDate } from '../lib/formatters'
 
 function SignalCard({ s }: { s: any }) {
   const tone = s.level === 'good'
@@ -42,6 +42,10 @@ export default function Insights() {
   const summary = d?.summary || {}
   const signals = d?.signals || []
   const actions = d?.actions || []
+  const marketing = d?.marketing || {}
+  const collections = marketing.collections || []
+  const dormantProducts = marketing.dormant_products || []
+  const loyaltyCandidates = marketing.loyalty_candidates || []
 
   return (
     <div>
@@ -63,6 +67,80 @@ export default function Insights() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {signals.map((s: any, i: number) => <SignalCard key={i} s={s} />)}
+        </div>
+
+        <div className="card space-y-4">
+          <h2 className="font-bold text-slate-800">Analyse Marketing</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm font-semibold text-slate-700 mb-2">Collections performantes (60j)</div>
+              {collections.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucune donnée collection sur la période.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {collections.slice(0, 6).map((c: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                      <div className="text-sm text-slate-700">{c.collection}</div>
+                      <div className="text-right">
+                        <div className="text-xs font-semibold text-slate-800">{c.orders} cmd</div>
+                        <div className="text-xs text-slate-500">{cfa(c.revenue || 0)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold text-slate-700 mb-2">Pièces non commandées récemment</div>
+              {dormantProducts.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucune pièce dormante détectée.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {dormantProducts.slice(0, 6).map((p: any) => (
+                    <div key={p.product_id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <div className="text-sm font-medium text-amber-900">{p.product_name}</div>
+                      <div className="text-xs text-amber-700">
+                        {p.collection} · Dernière commande: {fmtDate(p.last_order_date)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-slate-700 mb-2">Cibles fidélité (seuil atteint)</div>
+            {loyaltyCandidates.length === 0 ? (
+              <p className="text-sm text-slate-500">Aucun client au seuil fidélité pour l’instant.</p>
+            ) : (
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Contact</th>
+                      <th>Commandes (180j)</th>
+                      <th>CA (180j)</th>
+                      <th>Dernière commande</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loyaltyCandidates.map((c: any) => (
+                      <tr key={c.client_id}>
+                        <td className="font-medium text-slate-800">{c.full_name}</td>
+                        <td className="text-slate-600">{c.contact || '—'}</td>
+                        <td className="font-semibold text-slate-700">{c.orders_180d}</td>
+                        <td className="font-semibold text-slate-700">{cfa(c.revenue_180d || 0)}</td>
+                        <td className="text-slate-500">{fmtDate(c.last_order_date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="card">
